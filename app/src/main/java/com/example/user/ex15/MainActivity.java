@@ -1,6 +1,7 @@
 package com.example.user.ex15;
 
 import android.Manifest;
+import android.content.ContentUris;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -9,12 +10,17 @@ import android.net.Uri;
 import android.os.Build;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.provider.ContactsContract.CommonDataKinds.*;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
+
+import java.net.URI;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -28,8 +34,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        requestPermission(REQUEST_READ_PERMISSION);
-        requestPermission(REQUEST_READ_CONTACT);
+        int per = ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS);
+        if(per!=PackageManager.PERMISSION_GRANTED)
+        {
+            requestPermission(REQUEST_READ_CONTACT);
+        }
+        per = ContextCompat.checkSelfPermission(this,Manifest.permission.READ_EXTERNAL_STORAGE);
+        if(per!=PackageManager.PERMISSION_GRANTED)
+        {
+            requestPermission(REQUEST_READ_PERMISSION);
+        }
         pickImage = (Button)findViewById(R.id.button_img);
         pickImage.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -41,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
         pickContact.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                //DisplayContactList();
+                DisplayContactList();
             }
         });
     }
@@ -81,7 +95,22 @@ public class MainActivity extends AppCompatActivity {
                 imgView.setImageBitmap(BitmapFactory
                         .decodeFile(imgDecodableString));
 
-            } else {
+            }
+            else if(requestCode == REQUEST_READ_CONTACT && resultCode == RESULT_OK
+                    && null != data)
+            {
+                ContactInfo ci = getContactInfo(data.getData());
+                TextView fn = (TextView)findViewById(R.id.tvFillFirstName);
+                TextView ln = (TextView)findViewById(R.id.TVFillLastName);
+                TextView cn = (TextView)findViewById(R.id.tvFillPhone);
+                TextView an = (TextView)findViewById(R.id.tvFillAddress);
+
+                fn.setText(ci.firstName);
+                ln.setText(ci.lastName);
+                cn.setText(ci.cellNumer);
+                an.setText(ci.address);
+            }
+            else {
                 Toast.makeText(this, "You haven't picked Image",
                         Toast.LENGTH_LONG).show();
             }
@@ -123,5 +152,59 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
         }
+    }
+    private ContactInfo getContactInfo(Uri uriContact)
+    {
+        long contactID = ContentUris.parseId(uriContact);
+        ContactInfo ci = new ContactInfo();
+
+        Cursor cursorDetails = getContentResolver().query(ContactsContract.Data.CONTENT_URI,
+                new String[]{ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER,
+                        ContactsContract.CommonDataKinds.Phone.TYPE,
+                        ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME,
+                        ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME,
+                        ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS},
+                ContactsContract.Data.CONTACT_ID + " = ?",
+                new String[]{Long.toString(contactID)},
+                null);
+        while (cursorDetails.moveToNext())
+        {
+            String rowType = cursorDetails.getString(cursorDetails.getColumnIndex(ContactsContract.Data.MIMETYPE));
+            switch (rowType)
+            {
+                case Phone.CONTENT_ITEM_TYPE:
+                {
+                    int phoneType = cursorDetails.getInt((cursorDetails.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE)));
+                    ci.cellNumer = cursorDetails.getString(cursorDetails.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
+                    break;
+                }
+                case StructuredPostal.CONTENT_ITEM_TYPE:
+                {
+                    if (ci.address == null || ci.address.isEmpty())
+                        ci.address = cursorDetails.getString(cursorDetails.getColumnIndex(ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS));
+                    break;
+                }
+                case StructuredName.CONTENT_ITEM_TYPE:
+                {
+                    if (ci.firstName == null || ci.firstName.isEmpty())
+                        ci.firstName = cursorDetails.getString(cursorDetails.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME));
+                    if (ci.lastName == null || ci.firstName.isEmpty())
+                        ci.lastName = cursorDetails.getString(cursorDetails.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME));
+
+                    break;
+                }
+            }
+
+        }
+        cursorDetails.close();
+
+        return ci;
+    }
+    private class ContactInfo{
+        String cellNumer;
+        String firstName;
+        String lastName;
+        String address;
     }
 }
